@@ -1,0 +1,65 @@
+# Alert rules evaluated by Prometheus. View them at http://localhost:9090/alerts
+# (In production you would add Alertmanager to route them to e-mail / Slack / PagerDuty.)
+groups:
+  - name: fleet-pipeline-health
+    rules:
+      - alert: StreamProducerDown
+        expr: up{job="stream-producer"} == 0
+        for: 30s
+        labels: {severity: critical, stage: ingestion}
+        annotations:
+          summary: "Streaming source is not reachable"
+
+      - alert: NoEventsProcessed          # "no data received in N minutes"
+        expr: time() - spark_last_batch_timestamp_seconds > 120
+        for: 30s
+        labels: {severity: critical, stage: processing}
+        annotations:
+          summary: "Spark has not committed a micro-batch for over 2 minutes"
+
+      - alert: DataFreshnessBreached      # same rule, measured from the database
+        expr: pipeline_seconds_since_last_event > 120
+        for: 30s
+        labels: {severity: critical, stage: storage}
+        annotations:
+          summary: "Newest event in PostgreSQL is older than 2 minutes"
+
+      - alert: HighInvalidEventRate       # "error rate above threshold"
+        expr: sum(rate(spark_events_invalid_total[2m])) / sum(rate(spark_events_received_total[2m])) > 0.05
+        for: 1m
+        labels: {severity: warning, stage: processing}
+        annotations:
+          summary: "More than 5% of incoming events fail validation"
+
+      - alert: SparkBatchFailed
+        expr: increase(spark_batch_failures_total[5m]) > 0
+        labels: {severity: critical, stage: processing}
+        annotations:
+          summary: "A Spark micro-batch raised an exception"
+
+      - alert: PipelineDatabaseDown
+        expr: pipeline_db_up == 0
+        for: 30s
+        labels: {severity: critical, stage: storage}
+        annotations:
+          summary: "PostgreSQL is not reachable from the API"
+
+      - alert: BatchLayerStale
+        expr: (time() - batch_last_success_timestamp_seconds > 900) and (batch_last_success_timestamp_seconds > 0)
+        labels: {severity: warning, stage: orchestration}
+        annotations:
+          summary: "No successful Airflow batch run for 15 minutes (3 simulated days)"
+
+      - alert: BatchRunFailed
+        expr: increase(batch_days_processed_total{result="failed"}[15m]) > 0
+        labels: {severity: critical, stage: orchestration}
+        annotations:
+          summary: "The Airflow reconciliation DAG failed for a simulated day"
+
+  - name: fleet-business
+    rules:
+      - alert: IdleVehiclesDetected       # business threshold alert (also stored in the `alerts` table)
+        expr: fleet_open_idle_alerts > 0
+        labels: {severity: info, stage: serving}
+        annotations:
+          summary: "{{ $value }} vehicle(s) idle longer than the threshold"
