@@ -1,4 +1,4 @@
-# Fleet Operations Pipeline (Lambda architecture) - EC8203 Mini-Project, Use Case 1
+# Fleet Operations Pipeline (Lambda architecture)
 
 Ride-hailing fleet: live utilization from a Kafka telemetry stream (speed layer) reconciled every simulated
 day against garage/fuel cost files (batch layer, Airflow) into a per-vehicle profitability report.
